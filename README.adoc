@@ -1,0 +1,87 @@
+= CloudBees action: Create a Kubernetes namespace
+
+Use this action to create a Kubernetes namespace, that allows you to partition a Kubernetes cluster into different scopes.
+
+== Inputs
+
+[cols="2a,1a,1a,3a",options="header"]
+.Input details
+|===
+
+| Input name
+| Data type
+| Required?
+| Description
+
+| `name`
+| String
+| Yes
+| The namespace name.
+
+| `sanitize-name`
+| Boolean
+| No
+| Whether to sanitize the namespace name.
+Default is `true`.
+When value is `true`, the `name` value is truncated, suffixed with a hash, and validated.
+
+| `labels`
+| String
+| Yes
+| The YAML object of labels used to create the namespace.
+
+|===
+
+== Usage examples
+
+In your YAML file, add:
+
+[source,yaml]
+----
+      - id: createns
+        name: Create Kubernetes namespace
+        uses: cloudbees-io/create-k8s-namespace@v1
+        with:
+          name: 'ns_name'
+          sanitize-name: ''
+          labels: |
+            example.org/mylabel: xyz
+
+----
+
+=== Usage example with Helm
+
+Create a Kubernetes namespace, and then specify that namespace to install a Helm chart into the scoped cluster.
+
+In your YAML file, add:
+
+[source,yaml]
+----
+      - id: nshelm
+        name: Create Kubernetes namespace
+        uses: cloudbees-io/create-k8s-namespace@v1
+        with:
+          name: 'k8s_ns_name'
+          sanitize-name: ''
+          labels: |
+            example.org/mylabel: xyz
+
+      - name: Install Helm chart
+        uses: cloudbees-io/helm-install@v1
+        with:
+          namespace: ${{ steps.nshelm.outputs.name }}
+
+----
+
+For more information, refer to xref:helm-charts:helm-install.adoc[]. `namespace` is the name of the namespace resource.
+
+== License
+
+This code is made available under the 
+link:https://opensource.org/license/mit/[MIT license].
+
+== References
+
+* Learn more about link:https://docs.cloudbees.com/docs/cloudbees-saas-platform-actions/latest/[using actions in CloudBees workflows].
+* Learn about link:https://docs.cloudbees.com/docs/cloudbees-saas-platform/latest/[the CloudBees platform].
+

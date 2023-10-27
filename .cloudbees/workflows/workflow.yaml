@@ -1,0 +1,89 @@
+apiVersion: automation.cloudbees.io/v1alpha1
+kind: workflow
+name: Action test
+
+on:
+  push:
+    branches:
+    - '**'
+
+jobs:
+  test:
+    steps:
+    - name: Get source code
+      uses: cloudbees-io/checkout@v1
+
+    - name: Write kubeconfig
+      uses: docker://alpine:3.18
+      run: |
+        mkdir -p ${HOME}/.kube
+        echo -e "$KUBECONFIG" > ${HOME}/.kube/config
+      env:
+        KUBECONFIG: ${{ secrets.STAGING_CONFIG }}
+
+    - id: namegen
+      name: Generate namespace name for test
+      uses: docker://alpine:3.18
+      run: |
+        printf %.63s "create-k8s-ns-test-${{ cloudbees.scm.sha }}" > $CLOUDBEES_OUTPUTS/name
+
+    - id: actionrunmax
+      name: Run Action with all inputs specified
+      uses: ./
+      with:
+        name: ${{ steps.namegen.outputs.name }}
+        sanitize-name: 'false'
+        fail-if-exists: 'true'
+        labels: |
+          cloudbees.io/cleanup: "true"
+          example.com/some-label: some-value
+          cloudbees.io/test-label: ${{ cloudbees.scm.sha }}
+
+    - name: Test Action output maximum
+      uses: docker://alpine/k8s:1.27.3
+      run: |
+        set -ux
+        echo "$NAME" | grep -q '^create-k8s'
+        kubectl get ns "$NAME"
+        [ "$(kubectl get ns -l cloudbees.io/cleanup=true -l example.com/some-label=some-value -l cloudbees.io/test-label=${{ cloudbees.scm.sha }} | wc -l)" = 2 ]
+      env:
+        NAME: ${{ steps.actionrunmax.outputs.name }}
+
+    - id: actionrunmin
+      name: Run Action with no inputs specified
+      uses: ./
+
+    - name: Test Action output minimum
+      uses: docker://alpine/k8s:1.27.3
+      run: |
+        set -ux
+        NAME_PREFIX="$(printf %.8s "$BRANCH")"
+        echo "$NAME" | grep -q "^b$NAME_PREFIX"
+        kubectl get ns "$NAME"
+      env:
+        NAME: ${{ steps.actionrunmin.outputs.name }}
+        BRANCH: ${{ cloudbees.scm.branch }}
+
+    - id: actionrunexistingns
+      name: Run Action again to verify it does not fail when ns exists
+      uses: ./
+      with:
+        labels: |
+          cloudbees.io/fancy-ns-test-label: "true"
+
+    - name: Test Action rerun also returns name and does not add label
+      uses: docker://alpine/k8s:1.27.3
+      run: |
+        set -ux
+        NAME_PREFIX="$(printf %.8s "$BRANCH")"
+        echo "$NAME" | grep -q "^b$NAME_PREFIX"
+        kubectl get ns "$NAME"
+        kubectl get ns "$NAME" -o yaml | grep -qv 'cloudbees.io/fancy-ns-test-label: "true"'
+      env:
+        NAME: ${{ steps.actionrunexistingns.outputs.name }}
+        BRANCH: ${{ cloudbees.scm.branch }}
+
+    - name: Delete test Namespaces
+      uses: docker://alpine/k8s:1.27.3
+      run: |
+        kubectl delete ns "${{ steps.actionrunmax.outputs.name }}" "${{ steps.actionrunmin.outputs.name }}"

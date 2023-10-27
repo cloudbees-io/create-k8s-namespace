@@ -1,0 +1,61 @@
+apiVersion: automation.cloudbees.io/v1alpha1
+kind: action
+name: create-k8s-namespace
+description: 'Create a Kubernetes Namespace'
+
+inputs:
+  name:
+    description: |
+      Name of the Namespace.
+      When sanitize-name is enabled, the provided name will be sanitized
+    default: ${{ cloudbees.scm.branch }}-${{ cloudbees.scm.repository }}-${{ cloudbees.scm.sha }}
+  sanitize-name:
+    description: If 'true', the given name will be modified so that it is valid, truncated and suffixed with a hash
+    default: 'true'
+  labels:
+    description: |
+      A YAML object of labels the Namespace should be created with.
+      Example:
+        cloudbees.io/cleanup: "true"
+        example.org/mylabel: xyz
+  fail-if-exists:
+    description: Fail if the Namespace already exists
+    default: 'false'
+
+outputs:
+  name:
+    description: Name of the Kubernetes Namespace resource
+    value: ${{steps.createns.outputs.name}}
+
+runs:
+  using: composite
+  steps:
+    - id: createns
+      name: Create Kubernetes Namespace
+      uses: docker://alpine/k8s:1.27.3
+      run: |
+        set -u
+
+        if [ '${{ inputs.sanitize-name == 'true' }}' = true ]; then
+          HASH="$(printf %s "$NAME" | sha256sum)"
+          NAME="$(printf %s "$NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/')"
+          NAME="$(printf b%.8s-%.7s "$NAME" "$HASH" | sed -E 's/[^a-z0-9]+/-/')"
+        fi
+
+        echo "Creating Kubernetes Namespace '$NAME' if not exists"
+        echo "$LABELS" | yq eval '{
+          "apiVersion": "v1",
+          "kind": "Namespace",
+          "metadata": {
+            "name": env(NAME),
+            "labels": .
+          }
+        }' - > /tmp/namespace.yaml
+        OUT="$(kubectl create -f /tmp/namespace.yaml 2>&1)" || (
+          echo "$OUT" | grep -q "\"$NAME\" already exists" && ${{ inputs.fail-if-exists != 'true' }} || (echo "$OUT" >&2; false)
+        )
+
+        printf %s "$NAME" > $CLOUDBEES_OUTPUTS/name
+      env:
+        NAME: ${{ inputs.name }}
+        LABELS: ${{ inputs.labels }}
