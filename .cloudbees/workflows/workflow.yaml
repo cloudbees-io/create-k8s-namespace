@@ -9,23 +9,30 @@ on:
 
 jobs:
   test:
+    permissions:
+      scm-token-own: read
+      id-token: write
     steps:
     - name: Get source code
       uses: cloudbees-io/checkout@v1
-
-    - name: Write kubeconfig
-      uses: docker://alpine:3.18
-      run: |
-        mkdir -p ${HOME}/.kube
-        echo -e "$KUBECONFIG" > ${HOME}/.kube/config
-      env:
-        KUBECONFIG: ${{ secrets.STAGING_CONFIG }}
 
     - id: namegen
       name: Generate namespace name for test
       uses: docker://alpine:3.18
       run: |
         printf %.63s "create-k8s-ns-test-${{ cloudbees.scm.sha }}" > $CLOUDBEES_OUTPUTS/name
+
+    - name: Login to AWS
+      uses: cloudbees-io/configure-aws-credentials@v1
+      id: aws-login
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ vars.oidc_staging_iam_role }}
+        role-duration-seconds: "3600" # optionally set the duration of the login token
+
+    - uses: cloudbees-io/configure-eks-credentials@v1
+      with:
+        name: ${{ vars.tekton_east_cluster_name }}
 
     - id: actionrunmax
       name: Run Action with all inputs specified
@@ -57,7 +64,7 @@ jobs:
       uses: docker://alpine/k8s:1.27.3
       run: |
         set -ux
-        NAME_PREFIX="$(printf %.8s "$BRANCH")"
+        NAME_PREFIX=$(printf %.8s "$BRANCH" | tr '[:upper:]' '[:lower:]')
         echo "$NAME" | grep -q "^b$NAME_PREFIX"
         kubectl get ns "$NAME"
       env:
@@ -75,7 +82,7 @@ jobs:
       uses: docker://alpine/k8s:1.27.3
       run: |
         set -ux
-        NAME_PREFIX="$(printf %.8s "$BRANCH")"
+        NAME_PREFIX=$(printf %.8s "$BRANCH" | tr '[:upper:]' '[:lower:]')
         echo "$NAME" | grep -q "^b$NAME_PREFIX"
         kubectl get ns "$NAME"
         kubectl get ns "$NAME" -o yaml | grep -qv 'cloudbees.io/fancy-ns-test-label: "true"'
