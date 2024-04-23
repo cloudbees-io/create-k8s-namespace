@@ -64,7 +64,7 @@ jobs:
       uses: docker://alpine/k8s:1.27.3
       run: |
         set -ux
-        NAME_PREFIX="$(printf %.8s "$BRANCH")"
+        NAME_PREFIX=$(printf %.8s "$BRANCH" | tr '[:upper:]' '[:lower:]')
         echo "$NAME" | grep -q "^b$NAME_PREFIX"
         kubectl get ns "$NAME"
       env:
