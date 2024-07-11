@@ -32,7 +32,7 @@ runs:
   steps:
     - id: createns
       name: Create Kubernetes Namespace
-      uses: docker://alpine/k8s:1.27.3
+      uses: docker://alpine/k8s:1.30.2
       run: |
         set -u
 
