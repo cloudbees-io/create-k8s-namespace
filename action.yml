@@ -37,8 +37,7 @@ runs:
         set -u
 
         if [ '${{ inputs.sanitize-name == 'true' }}' = true ]; then
-          rand_str=$(tr -dc a-z0-9 < /dev/urandom | head -c 8)
-          HASH="$(printf %s "$NAME-$rand_str" | sha256sum)"
+          HASH="$(printf %s "$NAME" | sha256sum)"
           NAME="$(printf %s "$NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/')"
           NAME="$(printf b%.8s-%.7s "$NAME" "$HASH" | sed -E 's/[^a-z0-9]+/-/')"
         fi
