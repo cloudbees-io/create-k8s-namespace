@@ -8,6 +8,24 @@ on:
     - '**'
 
 jobs:
+  unit-test:
+    steps:
+    - name: Get source code
+      uses: cloudbees-io/checkout@v1
+
+    - name: Install BATS
+      uses: docker://alpine:3.18
+      run: |
+        apk add --no-cache bash curl tar
+        curl -sSL https://github.com/bats-core/bats-core/archive/v1.10.0.tar.gz | tar -xz -C /tmp
+        cd /tmp/bats-core-1.10.0 && ./install.sh /usr/local
+
+    - name: Run BATS unit tests
+      uses: docker://alpine:3.18
+      run: |
+        cd $CLOUDBEES_WORKSPACE
+        bats tests/ --verbose
+
   test:
     permissions:
       scm-token-own: read
@@ -90,7 +108,130 @@ jobs:
         NAME: ${{ steps.actionrunexistingns.outputs.name }}
         BRANCH: ${{ cloudbees.scm.branch }}
 
+    - id: test-sanitization-underscore
+      name: Test sanitization with underscores (original bug)
+      uses: ./
+      with:
+        name: 'bfix-z_db-134751b'
+        sanitize-name: 'true'
+        labels: |
+          cloudbees.io/cleanup: "true"
+          test-type: sanitization-underscore
+
+    - name: Validate underscore sanitization
+      uses: docker://alpine/k8s:1.27.3
+      run: |
+        set -ux
+        # Namespace should be created and RFC 1123 compliant
+        kubectl get ns "$NAME"
+        # Verify it's RFC 1123 compliant (lowercase alphanumeric + hyphens only)
+        if ! echo "$NAME" | grep -qE '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'; then
+          echo "ERROR: Namespace name '$NAME' is not RFC 1123 compliant"
+          exit 1
+        fi
+        # Should not contain underscore
+        if echo "$NAME" | grep -q '_'; then
+          echo "ERROR: Namespace name '$NAME' still contains underscore"
+          exit 1
+        fi
+        echo "✓ Underscore sanitization works correctly"
+      env:
+        NAME: ${{ steps.test-sanitization-underscore.outputs.name }}
+
+    - id: test-sanitization-multiple-special
+      name: Test sanitization with multiple special characters
+      uses: ./
+      with:
+        name: 'feature/add_new_functionality@v1.2.3'
+        sanitize-name: 'true'
+        labels: |
+          cloudbees.io/cleanup: "true"
+          test-type: sanitization-special-chars
+
+    - name: Validate multiple special char sanitization
+      uses: docker://alpine/k8s:1.27.3
+      run: |
+        set -ux
+        kubectl get ns "$NAME"
+        # Verify RFC 1123 compliance
+        if ! echo "$NAME" | grep -qE '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'; then
+          echo "ERROR: Namespace name '$NAME' is not RFC 1123 compliant"
+          exit 1
+        fi
+        echo "✓ Multiple special character sanitization works correctly"
+      env:
+        NAME: ${{ steps.test-sanitization-multiple-special.outputs.name }}
+
+    - id: test-sanitization-dots
+      name: Test sanitization with dots (another common issue)
+      uses: ./
+      with:
+        name: 'a.b.c.d.e.f.g'
+        sanitize-name: 'true'
+        labels: |
+          cloudbees.io/cleanup: "true"
+          test-type: sanitization-dots
+
+    - name: Validate dot sanitization
+      uses: docker://alpine/k8s:1.27.3
+      run: |
+        set -ux
+        kubectl get ns "$NAME"
+        # Verify RFC 1123 compliance
+        if ! echo "$NAME" | grep -qE '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'; then
+          echo "ERROR: Namespace name '$NAME' is not RFC 1123 compliant"
+          exit 1
+        fi
+        # Should not contain dots
+        if echo "$NAME" | grep -q '\.'; then
+          echo "ERROR: Namespace name '$NAME' still contains dots"
+          exit 1
+        fi
+        echo "✓ Dot sanitization works correctly"
+      env:
+        NAME: ${{ steps.test-sanitization-dots.outputs.name }}
+
+    - id: test-sanitization-mixed-case
+      name: Test sanitization with mixed case and underscores
+      uses: ./
+      with:
+        name: 'Feature_Branch_With_Underscores'
+        sanitize-name: 'true'
+        labels: |
+          cloudbees.io/cleanup: "true"
+          test-type: sanitization-mixed
+
+    - name: Validate mixed case and underscore sanitization
+      uses: docker://alpine/k8s:1.27.3
+      run: |
+        set -ux
+        kubectl get ns "$NAME"
+        # Verify RFC 1123 compliance
+        if ! echo "$NAME" | grep -qE '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'; then
+          echo "ERROR: Namespace name '$NAME' is not RFC 1123 compliant"
+          exit 1
+        fi
+        # Should be lowercase only
+        if echo "$NAME" | grep -q '[A-Z]'; then
+          echo "ERROR: Namespace name '$NAME' still contains uppercase"
+          exit 1
+        fi
+        # Should not contain underscores
+        if echo "$NAME" | grep -q '_'; then
+          echo "ERROR: Namespace name '$NAME' still contains underscores"
+          exit 1
+        fi
+        echo "✓ Mixed case and underscore sanitization works correctly"
+      env:
+        NAME: ${{ steps.test-sanitization-mixed.outputs.name }}
+
     - name: Delete test Namespaces
       uses: docker://alpine/k8s:1.27.3
       run: |
-        kubectl delete ns "${{ steps.actionrunmax.outputs.name }}" "${{ steps.actionrunmin.outputs.name }}"
+        kubectl delete ns \
+          "${{ steps.actionrunmax.outputs.name }}" \
+          "${{ steps.actionrunmin.outputs.name }}" \
+          "${{ steps.test-sanitization-underscore.outputs.name }}" \
+          "${{ steps.test-sanitization-multiple-special.outputs.name }}" \
+          "${{ steps.test-sanitization-dots.outputs.name }}" \
+          "${{ steps.test-sanitization-mixed.outputs.name }}"

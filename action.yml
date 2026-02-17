@@ -37,9 +37,7 @@ runs:
         set -u
 
         if [ '${{ inputs.sanitize-name == 'true' }}' = true ]; then
-          HASH="$(printf %s "$NAME" | sha256sum)"
-          NAME="$(printf %s "$NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g')"
-          NAME="$(printf b%.8s-%.7s "$NAME" "$HASH" | sed -E 's/[^a-z0-9]+/-/g' | sed -E 's/^-+|-+$//')"
+          NAME="$(${CLOUDBEES_WORKSPACE}/scripts/sanitize-name.sh "$NAME" "true")"
         fi
 
         echo "Creating Kubernetes Namespace '$NAME' if not exists"
