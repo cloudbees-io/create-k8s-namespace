@@ -38,8 +38,8 @@ runs:
 
         if [ '${{ inputs.sanitize-name == 'true' }}' = true ]; then
           HASH="$(printf %s "$NAME" | sha256sum)"
-          NAME="$(printf %s "$NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/')"
-          NAME="$(printf b%.8s-%.7s "$NAME" "$HASH" | sed -E 's/[^a-z0-9]+/-/')"
+          NAME="$(printf %s "$NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g')"
+          NAME="$(printf b%.8s-%.7s "$NAME" "$HASH" | sed -E 's/[^a-z0-9]+/-/g' | sed -E 's/^-+|-+$//')"
         fi
 
         echo "Creating Kubernetes Namespace '$NAME' if not exists"
