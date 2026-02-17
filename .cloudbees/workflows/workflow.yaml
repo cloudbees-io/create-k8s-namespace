@@ -223,7 +223,7 @@ jobs:
         fi
         echo "✓ Mixed case and underscore sanitization works correctly"
       env:
-        NAME: ${{ steps.test-sanitization-mixed.outputs.name }}
+        NAME: ${{ steps.test-sanitization-mixed-case.outputs.name }}
 
     - name: Delete test Namespaces
       uses: docker://alpine/k8s:1.27.3
@@ -234,4 +234,4 @@ jobs:
           "${{ steps.test-sanitization-underscore.outputs.name }}" \
           "${{ steps.test-sanitization-multiple-special.outputs.name }}" \
           "${{ steps.test-sanitization-dots.outputs.name }}" \
-          "${{ steps.test-sanitization-mixed.outputs.name }}"
+          "${{ steps.test-sanitization-mixed-case.outputs.name }}"
